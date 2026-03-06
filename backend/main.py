@@ -7,7 +7,9 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from .schemas import (
     DailyAutoSimulationRequest,
@@ -23,9 +25,23 @@ from .schemas import (
 from .services.math_model import MathDecisionEngine
 
 app = FastAPI(title="S2Cool Backend API", version="0.1.0")
+
+# CORS — allow Vite dev server (port 5173) during local development.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 engine = MathDecisionEngine()
 STATIC_INDEX = Path(__file__).resolve().parent / "static" / "index.html"
 PRODUCTION_METRICS = Path(__file__).resolve().parent / "static" / "production_metrics.json"
+
+# ---------- Vite build output (production) ----------
+# After `npm run build` inside frontend/, copy dist/ here or point at it.
+FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+FRONTEND_INDEX = FRONTEND_DIST / "index.html"
 
 
 def _city_bias(city: str) -> float:
@@ -130,7 +146,9 @@ def health() -> dict[str, str]:
 
 @app.get("/")
 def frontend() -> FileResponse:
-    """Serve ultra-basic demo frontend."""
+    """Serve the Vite-built dashboard if available, else the legacy static page."""
+    if FRONTEND_INDEX.exists():
+        return FileResponse(FRONTEND_INDEX)
     return FileResponse(STATIC_INDEX)
 
 
@@ -138,6 +156,15 @@ def frontend() -> FileResponse:
 def production_metrics() -> FileResponse:
     """Serve production model diagnostics consumed by dashboard footer."""
     return FileResponse(PRODUCTION_METRICS)
+
+
+# ---------- Mount Vite static assets (JS/CSS bundles) ----------
+if FRONTEND_DIST.exists() and (FRONTEND_DIST / "assets").exists():
+    app.mount(
+        "/assets",
+        StaticFiles(directory=str(FRONTEND_DIST / "assets")),
+        name="frontend-assets",
+    )
 
 
 @app.post("/v1/predict/math", response_model=DecisionResponse)

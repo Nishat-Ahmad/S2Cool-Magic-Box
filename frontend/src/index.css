@@ -1,0 +1,23 @@
+/* -----------------------------------------------------------------------
+   Tailwind base layers — this is the only CSS file in the project.
+   All component styling is done via Tailwind utility classes in JSX.
+   ----------------------------------------------------------------------- */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global resets */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+/* Custom range slider track color for dark theme */
+input[type="range"] {
+  accent-color: #3b82f6;
+}
