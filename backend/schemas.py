@@ -103,3 +103,99 @@ class DailyAutoSimulationResponse(DailySimulationResponse):
 
     source_mode: str
     hours: list[DailyProfilePoint]
+
+
+# ---- Tab 2: Comparative Analytics ----
+
+
+class CityComparisonRequest(BaseModel):
+    """Request 4-city GHI + temp overlay for a single date."""
+
+    date_utc: date
+    panel_count: int = Field(default=10, ge=1)
+    panel_watt_rating: float = Field(default=640.0, gt=0.0)
+
+
+class CityProfileSummary(BaseModel):
+    """One city's 24-hour profile plus operating percentage."""
+
+    city: str
+    operating_pct: float
+    hours: list[DailyProfilePoint]
+
+
+class CityComparisonResponse(BaseModel):
+    """4-city comparison payload."""
+
+    date_utc: date
+    cities: list[CityProfileSummary]
+
+
+class SeasonalCurvePoint(BaseModel):
+    """One hour in a seasonal average curve."""
+
+    hour: int
+    avg_ghi_wm2: float
+    avg_temp_c: float
+
+
+class SeasonalCurve(BaseModel):
+    """A named season's average 24-hour profile."""
+
+    season: str
+    hours: list[SeasonalCurvePoint]
+
+
+class SeasonalResponse(BaseModel):
+    """Seasonal comparison payload."""
+
+    city: str
+    curves: list[SeasonalCurve]
+
+
+# ---- Tab 3: ML Diagnostics ----
+
+
+class BacktestPoint(BaseModel):
+    """Single point in the actual vs predicted backtest."""
+
+    date_utc: date
+    hour: int
+    actual_ghi: float
+    predicted_ghi: float
+
+
+class BacktestResponse(BaseModel):
+    """Week of actual vs predicted data for backtesting chart."""
+
+    city: str
+    points: list[BacktestPoint]
+
+
+class ModelMetric(BaseModel):
+    """Error metrics for one model."""
+
+    model_name: str
+    mae: float
+    rmse: float
+    r2: float
+
+
+class ModelComparisonResponse(BaseModel):
+    """Side-by-side metrics for all trained models."""
+
+    models: list[ModelMetric]
+
+
+class FeatureImportanceItem(BaseModel):
+    """One feature and its importance weight."""
+
+    feature: str
+    importance: float
+
+
+class FeatureImportanceResponse(BaseModel):
+    """XGBoost feature importance payload."""
+
+    model_name: str
+    features: list[FeatureImportanceItem]

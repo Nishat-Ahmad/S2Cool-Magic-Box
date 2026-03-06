@@ -1,16 +1,27 @@
 // -------------------------------------------------------------------------
 // App.jsx — Single source of truth for all dashboard state.
 //
-// State lives here and is passed down as props. When the user changes
-// city, date, or any control-sidebar parameter, the /v1/simulate/day/auto
-// endpoint is called and the 24-hour profile is refreshed.
+// Three tabs:
+//   1. Live Controller   — interactive simulator (existing)
+//   2. Comparative Analytics — 4-city + seasonal comparisons
+//   3. ML Diagnostics    — backtest, model comparison, feature importance
+//
+// State lives here and is passed down as props.
 // -------------------------------------------------------------------------
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Header from "./components/Header";
+import TabNav from "./components/TabNav";
 import ControlSidebar from "./components/ControlSidebar";
 import HeroKPIs from "./components/HeroKPIs";
 import MainChart from "./components/MainChart";
+import CoolingBanner from "./components/CoolingBanner";
 import DiagnosticFooter from "./components/DiagnosticFooter";
+import CityComparisonChart from "./components/CityComparisonChart";
+import SeasonalChart from "./components/SeasonalChart";
+import BacktestChart from "./components/BacktestChart";
+import ModelComparisonChart from "./components/ModelComparisonChart";
+import FeatureImportanceChart from "./components/FeatureImportanceChart";
+import PipelineDetails from "./components/PipelineDetails";
 
 // --------------- helpers ---------------
 
@@ -71,6 +82,9 @@ function deriveChartSeries(
 // Main App component
 // -------------------------------------------------------------------------
 export default function App() {
+  // ---- Tab navigation ----
+  const [activeTab, setActiveTab] = useState("controller");
+
   // ---- Global controls ----
   const [city, setCity] = useState("Lahore");
   const [date, setDate] = useState(todayISO());
@@ -186,35 +200,64 @@ export default function App() {
         sourceMode={sourceMode}
       />
 
-      {/* ---- Body: sidebar + main content ---- */}
-      <div className="flex flex-col lg:flex-row gap-3 flex-1 min-h-0">
-        {/* Left sidebar — control parameters */}
-        <ControlSidebar
-          targetCop={targetCop}
-          onTargetCopChange={setTargetCop}
-          coolingThreshold={coolingThreshold}
-          onCoolingThresholdChange={setCoolingThreshold}
-          panelCount={panelCount}
-          onPanelCountChange={setPanelCount}
-          panelWattage={panelWattage}
-          onPanelWattageChange={setPanelWattage}
-        />
+      {/* ---- Tab navigation ---- */}
+      <TabNav activeTab={activeTab} onTabChange={setActiveTab} />
 
-        {/* Right main area — KPIs, chart, footer */}
-        <main className="flex flex-col gap-3 flex-1 min-w-0">
-          <HeroKPIs chartData={chartData} />
-          <MainChart
-            chartData={chartData}
+      {/* ============================================================
+          TAB 1: Live Controller
+          ============================================================ */}
+      {activeTab === "controller" && (
+        <div className="flex flex-col lg:flex-row gap-3 flex-1 min-h-0">
+          {/* Left sidebar — control parameters */}
+          <ControlSidebar
+            targetCop={targetCop}
+            onTargetCopChange={setTargetCop}
             coolingThreshold={coolingThreshold}
+            onCoolingThresholdChange={setCoolingThreshold}
+            panelCount={panelCount}
+            onPanelCountChange={setPanelCount}
+            panelWattage={panelWattage}
+            onPanelWattageChange={setPanelWattage}
           />
-          <DiagnosticFooter
-            loading={loading}
-            error={error}
-            sourceMode={sourceMode}
-            prodMetrics={prodMetrics}
-          />
-        </main>
-      </div>
+
+          {/* Right main area — KPIs, banner, chart, footer */}
+          <main className="flex flex-col gap-3 flex-1 min-w-0">
+            <HeroKPIs chartData={chartData} />
+            <CoolingBanner chartData={chartData} coolingThreshold={coolingThreshold} />
+            <MainChart chartData={chartData} coolingThreshold={coolingThreshold} />
+            <DiagnosticFooter
+              loading={loading}
+              error={error}
+              sourceMode={sourceMode}
+              prodMetrics={prodMetrics}
+            />
+          </main>
+        </div>
+      )}
+
+      {/* ============================================================
+          TAB 2: Comparative Analytics
+          ============================================================ */}
+      {activeTab === "analytics" && (
+        <div className="flex flex-col gap-3 flex-1">
+          <CityComparisonChart date={date} />
+          <SeasonalChart city={city} />
+        </div>
+      )}
+
+      {/* ============================================================
+          TAB 3: ML Diagnostics & Transparency
+          ============================================================ */}
+      {activeTab === "diagnostics" && (
+        <div className="flex flex-col gap-3 flex-1">
+          <BacktestChart city={city} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <ModelComparisonChart />
+            <FeatureImportanceChart />
+          </div>
+          <PipelineDetails />
+        </div>
+      )}
     </div>
   );
 }
