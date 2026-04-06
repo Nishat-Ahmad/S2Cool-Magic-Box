@@ -68,8 +68,9 @@ __MACOSX/
 # Folders
 data/
 artifacts/
+Static Model/artifacts/xgboost_ghi_test_prediction.csv
+Static Model/artifacts/xgboost_temp_test_prediction.csv
 magic/
 Static Model/Dataset
-!Static Model/artifacts/
 Static Model/logs/
-!static Model/scripts/
+!Static Model/scripts/

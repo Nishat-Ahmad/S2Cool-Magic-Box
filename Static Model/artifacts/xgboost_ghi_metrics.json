@@ -27,9 +27,10 @@
     "ghi_rolling_mean_3h",
     "ghi_rolling_std_3h"
   ],
-  "train_rows": 346113,
-  "test_rows": 86529,
-  "mae": 17.170572859074387,
-  "rmse": 44.96227374436976,
-  "r2": 0.9752908990015211
+  "train_rows": 26846,
+  "test_rows": 1439,
+  "test_descriptor": "api:Islamabad:2026-01-01->2026-03-01",
+  "mae": 56.41472207078396,
+  "rmse": 86.29812376334898,
+  "r2": 0.8278397644813283
 }

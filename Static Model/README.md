@@ -172,3 +172,38 @@ Latest temp metrics:
 - MAE: 0.2982
 - RMSE: 0.6787
 - R2: 0.9818
+
+## API-based holdout evaluation on 2026 Islamabad data
+
+Run command:
+
+```powershell
+py -3.14 "scripts/train_xgboost.py" --dataset-dir "dataset" --target-mode "both" --backtest-mode "holdout" --test-source "api" --api-city "Islamabad" --api-start-date "2026-01-01" --api-end-date "2026-03-01" --max-rows-per-file 1500 --artifacts-dir "artifacts"
+```
+
+Execution summary:
+
+- Dataset source: local Excel files (79/80 usable files)
+- Dataset rows loaded: 28,368 (capped at max-rows-per-file=1500)
+- Test data source: Open-Meteo API, Islamabad, 2026-01-01 to 2026-03-01
+- Test rows fetched: 1,440 hourly records, processed to 1,439 (after feature engineering)
+
+**GHI model results:**
+
+- train_rows: 26,846
+- test_rows: 1,439
+- test_descriptor: api:Islamabad:2026-01-01->2026-03-01
+- MAE: 56.4147
+- RMSE: 86.2981
+- R2: 0.8278
+
+**Temperature model results:**
+
+- train_rows: 26,846
+- test_rows: 1,439
+- test_descriptor: api:Islamabad:2026-01-01->2026-03-01
+- MAE: 1.1252
+- RMSE: 1.5487
+- R2: 0.9078
+
+This run demonstrates the model's ability to forecast next-hour conditions on external, real-world 2026 weather data from an API source, validating generalization performance beyond the static training dataset.
