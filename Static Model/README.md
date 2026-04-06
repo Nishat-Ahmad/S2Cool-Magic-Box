@@ -1,120 +1,133 @@
-# Static Model - Detailed Work Log
+# Static Model - XGBoost Next-Hour Weather Forecasting
 
-This file records exactly what was implemented to train XGBoost next-hour models (GHI and temperature) from the dataset in this folder.
+Modular training pipeline for next-hour GHI and temperature forecasting using XGBoost regressors trained on historical Excel weather datasets and validated on real-time API data.
 
-## Scope completed
+## Quick Start
 
-- Implemented and iteratively improved Static Model/train_xgboost.py.
-- Built a working training pipeline end-to-end (load -> clean -> feature engineer -> train -> evaluate -> save artifacts).
-- Added schema adapters so mixed Excel formats can be consumed by one script.
-- Re-ran training after each major loader fix and regenerated artifacts.
+```bash
+# Install dependencies
+pip install -r requirements.txt
 
-## Detailed changes made in train_xgboost.py
+# Train both models with local data (holdout evaluation)
+python scripts/train_xgboost.py --target-mode both --backtest-mode holdout
 
-### 1. Initial pipeline implementation
+# Train with API-based test data (2026 Islamabad)
+python scripts/train_xgboost.py --target-mode both --test-source api --api-city Islamabad \
+  --api-start-date 2026-01-01 --api-end-date 2026-03-01
 
-- Added CLI arguments:
-  - --dataset-dir
-  - --artifacts-dir
-  - --max-rows-per-file
-  - --max-files
-  - --target-mode (ghi | temperature | both)
-- Added chronological train/test split for time-series safe evaluation.
-- Added XGBoost regressor training with fixed hyperparameters.
-- Added artifact writers for model, metrics, predictions, and feature importance.
+# Rolling-window backtest
+python scripts/train_xgboost.py --target-mode ghi --backtest-mode rolling
+```
 
-### 2. Robust column normalization and aliasing
+## Project Structure
 
-- Added canonical column normalization function.
-- Added aliases for heterogeneous names, including:
-  - GHI_corr_Avg -> ghi
-  - DNI_corr_Avg -> dni
-  - DHI_corr_Avg -> dhi
-  - Tair_Avg / Tamb -> temperature
-  - RH_Avg / RH -> humidity
-  - BP_CS100_Avg / BP -> pressure
-  - WS / WSgust / WD -> wind features
-  - TIMESTAMP / TS -> timestamp
+### Scripts (refactored modular architecture)
 
-### 3. Multi-format workbook ingestion strategies
+- **scripts/train_xgboost.py** — Main orchestration script (~60 lines)
+- **scripts/config.py** — CLI argument parsing & configuration
+- **scripts/data_loader.py** — Excel file ingestion & Open-Meteo API integration
+- **scripts/features.py** — Feature engineering (lags, cyclical, rolling statistics)
+- **scripts/model.py** — XGBoost training & evaluation (holdout, rolling backtest)
+- **scripts/artifacts.py** — Model, metrics, and predictions output saving
+- **scripts/logging_config.py** — Logging configuration
+- **scripts/__init__.py** — Package marker
 
-- Added strategy-based reading for different file families:
-  - TIMESTAMP style files (single-sheet layout)
-  - Pk-Isb monthly workbooks (1h, 10min, day sheets; header around row 18)
-- Added filename-pattern handling for both pk_isb_ and pk-isb_ variants.
-- Added non-zip guard to skip invalid/corrupt files safely.
+### Data & Artifacts
 
-### 4. Canonical frame standardization
+- **dataset/** — Input Excel weather files (79/80 usable files)
+- **artifacts/** — Output models, metrics, predictions, and feature importance
+- **logs/** — Training run logs
 
-- Unified all loaded data into a canonical schema centered on timestamp plus weather/irradiance fields.
-- Added numeric coercion and filtering to drop non-data rows (units/stat labels).
-- Added source_file tagging for traceability.
+## Detailed Implementation
 
-### 5. Feature engineering implemented
+### 1. Data Loading Strategy
 
-- Calendar features: hour, day_of_year, month
-- Cyclical features: hour_sin, hour_cos, doy_sin, doy_cos
-- Lags: ghi_lag_1, ghi_lag_2, ghi_lag_3, ghi_lag_24, temp_lag_1
-- Rolling: ghi_rolling_mean_3h, ghi_rolling_std_3h
-- Targets:
-  - target_ghi_next_1h
-  - target_temperature_next_1h
+
+**Location:** `scripts/features.py`
+
+- **Calendar features:** hour, day_of_year, month
+- **Cyclical encoding:**
+  - hour_sin, hour_cos (24-hour cycle)
+  - doy_sin, doy_cos (365.25-day solar year cycle)
+- **Lag features:** ghi_lag_1, ghi_lag_2, ghi_lag_3, ghi_lag_24, temp_lag_1
+- **Rolling statistics:** ghi_rolling_mean_3h, ghi_rolling_std_3h (3-hour windows)
+- **Targets:** target_ghi_next_1h, target_temperature_next_1h (shifted by -1 hour)
+- Handles missing values via interpolation and forward/backward fill
+
+### 3. Model Training & Evaluation
+
+**Location:** `scripts/model.py`
+
+- **XGBoost configuration:**
+  - 500 estimators, max_depth=6, learning_rate=0.05
+  - Subsample=0.9, colsample_bytree=0.9, random_state=42
+- **Evaluation modes:**
+  - Holdout: chronological train/test split (year-based or 80/20)
+  - Rolling backtest: fixed-window folds with configurable train/test/step sizes
+- **Explicit split support:** For external test datasets (e.g., API or test-year holdout)
+- **Metrics:** MAE, RMSE, R²
+
+### 4. Artifact Management
+
+**Location:** `scripts/artifacts.py`
+
+- Model joblib serialization
+- Metrics JSON (includes feature list, test descriptor, performance scores)
+- Test predictions CSV (actual/predicted/residual)
+- Feature importance CSV (sorted by importance score)
+- Rolling backtest: per-fold metrics + aggregated summary statistics
+
+## Command-Line Interface
+
+**Main script:** `scripts/train_xgboost.py`
+
+### Core arguments
+
+- `--dataset-dir` (Path, default: `dataset`) — Folder containing .xlsx files
+- `--artifacts-dir` (Path, default: `artifacts`) — Output folder for models/metrics
+- `--target-mode` (ghi | temperature | both) — Prediction target
+- `--backtest-mode` (holdout | rolling) — Evaluation strategy
+
+### Data loading options
+
+- `--max-rows-per-file` (int, default: 20000) — Cap rows per file (0 = no cap)
+- `--max-files` (int, default: 0) — Limit number of files (0 = all files)
+
+### Holdout evaluation options
+
+- `--test-year` (int, default: 2026) — Calendar year for test set (chronological split)
+- `--test-source` (dataset | api, default: dataset)
+  - `dataset`: Use local dataset directory for test data
+  - `api`: Fetch test data from Open-Meteo API
+- `--test-dataset-dir` (Path) — External test dataset directory
+- `--api-city` (Islamabad | Lahore | Karachi | Peshawar, default: Islamabad)
+- `--api-start-date` (YYYY-MM-DD) — API test period start
+- `--api-end-date` (YYYY-MM-DD) — API test period end
+
+### Rolling backtest options
+
+- `--rolling-train-size` (int, default: 0) — Training window (0 = 60% of data)
+- `--rolling-test-size` (int, default: 0) — Test window (0 = 10% or 500 rows)
+- `--rolling-step-size` (int, default: 0) — Step between folds (0 = test_size)
+- `--rolling-max-folds` (int, default: 5) — Maximum folds to evaluate
 
 ## Artifact outputs
 
-Generated in Static Model/artifacts:
 
-- xgboost_ghi_model.joblib
-  - Trained model used for inference.
-- xgboost_ghi_metrics.json
-  - Metrics and metadata for the latest run.
-- xgboost_ghi_test_predictions.csv
-  - Holdout actual/predicted/residual rows.
-- xgboost_ghi_feature_importance.csv
-  - Feature importance scores from the trained model.
-- xgboost_temp_model.joblib
-  - Trained temperature model for next-hour ambient temperature forecasting.
-- xgboost_temp_metrics.json
-  - Metrics and metadata for temperature target mode.
-- xgboost_temp_test_predictions.csv
-  - Holdout actual/predicted/residual rows for temperature mode.
-- xgboost_temp_feature_importance.csv
-  - Feature importance scores for temperature model.
+**Files generated in `artifacts/`:**
 
-## Target modes
+- `xgboost_ghi_model.joblib` — Trained GHI forecasting model
+- `xgboost_ghi_metrics.json` — Performance metrics & metadata (train/test rows, MAE, RMSE, R²)
+- `xgboost_ghi_test_predictions.csv` — Holdout actual/predicted/residual values
+- `xgboost_ghi_feature_importance.csv` — Feature importance scores (sorted)
+- `xgboost_temp_model.joblib` — Trained temperature forecasting model
+- `xgboost_temp_metrics.json` — Temperature model metrics & metadata
+- `xgboost_temp_test_predictions.csv` — Temperature predictions
+- `xgboost_temp_feature_importance.csv` — Temperature model feature importance
+- `xgboost_*_rolling_backtest_folds.csv` — Per-fold metrics (if rolling mode)
+- `xgboost_*_rolling_backtest_summary.json` — Aggregated backtest statistics
 
-- ghi
-  - Predicts target_ghi_next_1h (next-hour GHI).
-- temperature
-  - Predicts target_temperature_next_1h (next-hour ambient temperature).
-- both
-  - Trains and saves both GHI and temperature models in one run.
-
-## Training runs and outcomes
-
-### Early baseline full run (before schema adapters)
-
-- Files scanned: 80
-- Usable files: 1
-- Rows loaded: 438103
-- Performance:
-  - MAE: 18.2070
-  - RMSE: 45.7878
-  - R2: 0.9744
-
-### After schema-adapter upgrades
-
-- Loader validation (max_rows_per_file=1500):
-  - Usable files: 79 of 80
-  - Rows loaded: 28368
-- Updated training run (max_rows_per_file=1500):
-  - train_rows: 21476
-  - test_rows: 5370
-  - MAE: 25.5479779484
-  - RMSE: 57.3322516269
-  - R2: 0.9582070276
-
-### Latest full training pass (target-mode=both, full dataset)
+## Training metrics & validation results
 
 Run command:
 
@@ -207,3 +220,35 @@ Execution summary:
 - R2: 0.9078
 
 This run demonstrates the model's ability to forecast next-hour conditions on external, real-world 2026 weather data from an API source, validating generalization performance beyond the static training dataset.
+
+## Latest rolling backtest validation (April 6, 2026)
+
+Run command:
+
+```powershell
+python scripts/train_xgboost.py --dataset-dir "..\dataset" --artifacts-dir "..\artifacts" --target-mode both --backtest-mode rolling
+```
+
+Execution summary:
+
+- Dataset source: local Excel files (79/80 usable files, "Pk-Isb_2020-01-Mar-to-15-Dec.xlsx" skipped as invalid)
+- Total dataset rows loaded: 195,076 (capped at max-rows-per-file=20000)
+- Rows after feature engineering: 191,838
+- Validation strategy: 4-fold rolling-window backtest
+- Train/test window sizes: 115,102 training rows per fold, 19,183 test rows per fold
+
+**GHI (Global Horizontal Irradiance) model results:**
+
+- MAE: 15.7696 ± 6.3132 W/m²
+- RMSE: 41.0250 ± 13.9539 W/m²
+- R²: 0.9779 ± 0.0101
+- Artifacts: `xgboost_ghi_rolling_backtest_folds.csv`, `xgboost_ghi_rolling_backtest_summary.json`
+
+**Temperature model results:**
+
+- MAE: 0.2567 ± 0.0614 °C
+- RMSE: 0.4595 ± 0.1303 °C
+- R²: 0.9949 ± 0.0020
+- Artifacts: `xgboost_temp_rolling_backtest_folds.csv`, `xgboost_temp_rolling_backtest_summary.json`
+
+This rolling backtest demonstrates consistent model performance across sequential time windows, validating chronological stability of the forecasting models.

@@ -1,0 +1,1 @@
+"""Static Model training scripts package."""
