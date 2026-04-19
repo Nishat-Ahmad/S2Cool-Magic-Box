@@ -5,8 +5,6 @@ from __future__ import annotations
 import logging
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
-from datetime import datetime
 
 import psycopg2
 import psycopg2.extras
