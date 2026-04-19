@@ -121,6 +121,3 @@ def upsert_records(
     with get_connection(database_url) as conn, conn.cursor() as cur:
         psycopg2.extras.execute_values(cur, UPSERT_SQL, rows, page_size=500)
         logger.info("[%s] Upsert complete — %s", label, cur.statusmessage)
-
-
-
