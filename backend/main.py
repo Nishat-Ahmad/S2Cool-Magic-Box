@@ -28,8 +28,11 @@ from .schemas import (
     DecisionResponse,
     DriveCityMetric,
     DriveDailyPoint,
+    DriveFileItem,
     DriveFolderDataRequest,
     DriveFolderDataResponse,
+    DriveFolderListRequest,
+    DriveFolderListResponse,
     DriveInsightsResponse,
     DriveRecentPoint,
     DriveScatterPoint,
@@ -49,7 +52,7 @@ from .schemas import (
     SeasonalCurvePoint,
     SeasonalResponse,
 )
-from .drive_utils import get_public_file_from_upload, get_public_file_from_url, normalize_drive_data
+from .drive_utils import extract_folder_id_from_url, get_public_file_from_drive_id, get_public_file_from_upload, get_public_file_from_url, list_public_drive_files, normalize_drive_data
 from .services.math_model import MathDecisionEngine
 
 app = FastAPI(title="S2Cool Backend API", version="0.1.0")
@@ -657,6 +660,38 @@ def drive_info():
     }
 
 
+@app.post("/v1/drive/list-files", response_model=DriveFolderListResponse)
+def list_drive_files(request: DriveFolderListRequest) -> DriveFolderListResponse:
+    """List all CSV/XLSX files from a public Google Drive folder."""
+    if not request.folder_url:
+        return DriveFolderListResponse(folder_id="", total_files=0, files=[])
+
+    folder_id = extract_folder_id_from_url(request.folder_url)
+    if not folder_id:
+        return DriveFolderListResponse(folder_id="", total_files=0, files=[])
+
+    files = list_public_drive_files(folder_id)
+    if files is None:
+        return DriveFolderListResponse(
+            folder_id=folder_id,
+            total_files=0,
+            files=[],
+        )
+
+    file_items = [
+        DriveFileItem(
+            id=f["id"],
+            name=f["name"],
+            mimeType=f["mimeType"],
+            size=f.get("size"),
+            modifiedTime=f.get("modifiedTime"),
+        )
+        for f in files
+    ]
+
+    return DriveFolderListResponse(folder_id=folder_id, total_files=len(file_items), files=file_items)
+
+
 @app.post("/v1/drive/fetch-file", response_model=DriveFolderDataResponse)
 def fetch_public_file(request: DriveFolderDataRequest) -> DriveFolderDataResponse:
     """Fetch and parse a CSV/XLSX file from a public URL, return chart-ready data."""
@@ -832,6 +867,111 @@ async def upload_drive_file(file: UploadFile = File(...)) -> DriveFolderDataResp
             file_url=None,
             fetch_timestamp_utc=datetime.now(UTC),
             source_file_name=file.filename if file else None,
+            last_ingested_at=None,
+            total_points=0,
+            daily=[],
+            by_city=[],
+            scatter=[],
+            recent=[],
+            timeseries=[],
+            all_columns=[],
+        )
+
+
+@app.post("/v1/drive/fetch-drive-file", response_model=DriveFolderDataResponse)
+def fetch_drive_file(file_id: str, file_name: str | None = None) -> DriveFolderDataResponse:
+    """Fetch and parse a file from Google Drive by file ID, return chart-ready data."""
+    if not file_id:
+        return DriveFolderDataResponse(
+            file_url=None,
+            fetch_timestamp_utc=datetime.now(UTC),
+            source_file_name=None,
+            last_ingested_at=None,
+            total_points=0,
+            daily=[],
+            by_city=[],
+            scatter=[],
+            recent=[],
+            timeseries=[],
+            all_columns=[],
+        )
+
+    try:
+        df = get_public_file_from_drive_id(file_id, file_name)
+        if df is None or df.empty:
+            return DriveFolderDataResponse(
+                file_url=None,
+                fetch_timestamp_utc=datetime.now(UTC),
+                source_file_name=file_name,
+                last_ingested_at=None,
+                total_points=0,
+                daily=[],
+                by_city=[],
+                scatter=[],
+                recent=[],
+                timeseries=[],
+                all_columns=[],
+            )
+
+        normalized = normalize_drive_data(df)
+
+        return DriveFolderDataResponse(
+            file_url=None,
+            fetch_timestamp_utc=datetime.now(UTC),
+            source_file_name=file_name or "drive_file",
+            last_ingested_at=datetime.now(UTC),
+            total_points=normalized.get("total_points", 0),
+            daily=[
+                DriveDailyPoint(
+                    date_utc=d["date_utc"],
+                    avg_ghi=d["avg_ghi"],
+                    avg_temp=d["avg_temp"],
+                )
+                for d in normalized.get("daily", [])
+            ],
+            by_city=[
+                DriveCityMetric(
+                    city=c["city"],
+                    avg_ghi=c["avg_ghi"],
+                    avg_temp=c["avg_temp"],
+                )
+                for c in normalized.get("by_city", [])
+            ],
+            scatter=[
+                DriveScatterPoint(ghi=s["ghi"], temp=s["temp"])
+                for s in normalized.get("scatter", [])
+            ],
+            recent=[
+                DriveRecentPoint(
+                    timestamp_utc=r["timestamp_utc"],
+                    city=r["city"],
+                    ghi=r["ghi"],
+                    temp=r["temp"],
+                )
+                for r in normalized.get("recent", [])
+            ],
+            timeseries=[
+                DriveTimeSeriesPoint(
+                    timestamp_utc=ts.get("timestamp_utc"),
+                    city=ts.get("city"),
+                    power_avg_w=ts.get("power_avg_w"),
+                    ghi_w_m2=ts.get("ghi_w_m2"),
+                    dni_w_m2=ts.get("ni_w_m2"),
+                    dhi_w_m2=ts.get("dhi_w_m2"),
+                    ambient_temp_c=ts.get("ambient_temp_c"),
+                    relative_humidity_pct=ts.get("relative_humidity_pct"),
+                    wind_speed_m_s=ts.get("wind_speed_m_s"),
+                )
+                for ts in normalized.get("timeseries", [])
+            ],
+            all_columns=normalized.get("all_columns", []),
+        )
+    except Exception as e:
+        print(f"Error fetching drive file: {e}")
+        return DriveFolderDataResponse(
+            file_url=None,
+            fetch_timestamp_utc=datetime.now(UTC),
+            source_file_name=file_name,
             last_ingested_at=None,
             total_points=0,
             daily=[],

@@ -54,6 +54,9 @@ function StatCard({ label, value, sub }) {
 export default function DriveDatasetInsights() {
   const [fileUrl, setFileUrl] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
+  const [folderUrl, setFolderUrl] = useState("");
+  const [folderFiles, setFolderFiles] = useState([]);
+  const [folderLoading, setFolderLoading] = useState(false);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -132,6 +135,53 @@ export default function DriveDatasetInsights() {
         setError(err.message);
         setLoading(false);
       }
+    }
+  };
+
+  const handleListFolderFiles = async (e) => {
+    e?.preventDefault();
+    if (!folderUrl.trim()) {
+      setError("Please paste a Google Drive folder URL");
+      return;
+    }
+
+    setFolderLoading(true);
+    setError("");
+    setFolderFiles([]);
+
+    try {
+      const res = await fetch("/v1/drive/list-files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder_url: folderUrl.trim() }),
+      });
+      if (!res.ok) throw new Error(`API ${res.status}`);
+      const d = await res.json();
+      setFolderFiles(d.files || []);
+      setFolderLoading(false);
+    } catch (err) {
+      setError(err.message);
+      setFolderLoading(false);
+    }
+  };
+
+  const handleSelectDriveFile = async (file) => {
+    setLoading(true);
+    setError("");
+    setData(null);
+
+    try {
+      const res = await fetch(
+        `/v1/drive/fetch-drive-file?file_id=${encodeURIComponent(file.id)}&file_name=${encodeURIComponent(file.name)}`,
+        { method: "POST" }
+      );
+      if (!res.ok) throw new Error(`API ${res.status}`);
+      const d = await res.json();
+      setData(d);
+      setLoading(false);
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
     }
   };
 
@@ -249,6 +299,54 @@ export default function DriveDatasetInsights() {
             >
               {loading ? "Uploading..." : "Upload & Visualize"}
             </button>
+          </div>
+
+          <div className="border-t border-s2-border pt-3">
+            <label className="block text-xs text-s2-muted mb-1 uppercase tracking-widest">
+              Or Browse Public Google Drive Folder
+            </label>
+            <input
+              type="text"
+              placeholder="https://drive.google.com/drive/folders/{FOLDER_ID}"
+              value={folderUrl}
+              onChange={(e) => setFolderUrl(e.target.value)}
+              disabled={folderLoading || loading}
+              className="w-full px-3 py-2 bg-[#101014] border border-s2-border text-s2-text rounded text-xs focus:outline-none focus:ring-1 focus:ring-s2-accent font-mono text-xs"
+            />
+            <p className="text-xs text-s2-muted mt-1">
+              Public folder URL with CSV/XLSX files. Requires GOOGLE_DRIVE_API_KEY environment variable.
+            </p>
+            <button
+              type="button"
+              onClick={handleListFolderFiles}
+              disabled={folderLoading || loading || !folderUrl.trim()}
+              className="mt-2 px-3 py-2 bg-white text-black rounded text-xs font-semibold hover:bg-neutral-200 disabled:opacity-50 transition w-fit"
+            >
+              {folderLoading ? "Loading..." : "List Files"}
+            </button>
+
+            {folderFiles.length > 0 && (
+              <div className="mt-3 bg-[#101014] border border-s2-border rounded p-3">
+                <p className="text-xs text-s2-muted mb-2 uppercase tracking-widest">Available Files ({folderFiles.length})</p>
+                <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                  {folderFiles.map((file) => (
+                    <button
+                      key={file.id}
+                      onClick={() => handleSelectDriveFile(file)}
+                      disabled={loading}
+                      className="w-full text-left px-2 py-1.5 bg-[#0c0c0f] hover:bg-[#1a1a20] border border-s2-border rounded text-xs text-s2-text font-mono transition disabled:opacity-50"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="truncate">{file.name}</span>
+                        <span className="text-s2-muted text-[10px] ml-2">
+                          {file.size ? `${(file.size / 1024 / 1024).toFixed(1)}MB` : ""}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </form>
 

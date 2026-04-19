@@ -327,3 +327,30 @@ class DriveFolderDataResponse(DriveInsightsResponse):
     file_url: str | None = None
     fetch_timestamp_utc: datetime | None = None
     timeseries: list[DriveTimeSeriesPoint] | None = None
+
+
+class DriveFileItem(BaseModel):
+    """One file from a Google Drive folder listing."""
+
+    id: str
+    name: str
+    mimeType: str
+    size: int | None = None
+    modifiedTime: str | None = None
+
+
+class DriveFolderListResponse(BaseModel):
+    """Response containing list of files from a Google Drive folder."""
+
+    folder_id: str
+    total_files: int
+    files: list[DriveFileItem]
+
+
+class DriveFolderListRequest(BaseModel):
+    """Request to list files from a public Google Drive folder."""
+
+    folder_url: str = Field(
+        ...,
+        description="Public Google Drive folder URL (e.g., https://drive.google.com/drive/folders/{FOLDER_ID})",
+    )

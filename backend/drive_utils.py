@@ -4,11 +4,119 @@ from __future__ import annotations
 
 import io
 import logging
+import os
 
 import pandas as pd
 import requests
 
+try:
+    from googleapiclient.discovery import build
+    from googleapiclient.errors import HttpError
+    GOOGLE_API_AVAILABLE = True
+except ImportError:
+    GOOGLE_API_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
+
+
+def extract_folder_id_from_url(url: str) -> str | None:
+    """Extract Google Drive folder ID from share URL."""
+    if not url:
+        return None
+    if "/folders/" in url:
+        return url.split("/folders/")[1].split("?")[0]
+    if "?id=" in url:
+        return url.split("?id=")[1].split("&")[0]
+    # Assume it's already a folder ID
+    return url
+
+
+def list_public_drive_files(folder_id: str) -> list[dict] | None:
+    """
+    List all CSV/XLSX files from a public Google Drive folder.
+
+    Args:
+        folder_id: Google Drive folder ID (from share URL)
+
+    Returns:
+        List of dicts with 'id', 'name', 'mimeType', or None if API unavailable.
+    """
+    if not GOOGLE_API_AVAILABLE:
+        logger.warning("Google API client not available; install google-api-python-client")
+        return None
+
+    api_key = os.getenv("GOOGLE_DRIVE_API_KEY")
+    if not api_key:
+        logger.warning("GOOGLE_DRIVE_API_KEY environment variable not set")
+        return None
+
+    try:
+        service = build("drive", "v3", developerKey=api_key)
+        query = f"'{folder_id}' in parents and (mimeType='text/csv' or mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mimeType='application/vnd.ms-excel') and trashed=false"
+        results = (
+            service.files()
+            .list(
+                q=query,
+                spaces="drive",
+                fields="files(id, name, mimeType, createdTime, modifiedTime, size)",
+                pageSize=100,
+            )
+            .execute()
+        )
+        files = results.get("files", [])
+        logger.info(f"Found {len(files)} CSV/XLSX files in folder {folder_id}")
+        return files
+    except HttpError as e:
+        logger.error(f"Google Drive API error: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Error listing drive files: {e}")
+        return None
+
+
+def get_public_file_from_drive_id(file_id: str, file_name: str | None = None) -> pd.DataFrame | None:
+    """
+    Download a file from Google Drive by its file ID and parse into DataFrame.
+
+    Args:
+        file_id: Google Drive file ID
+        file_name: Optional file name for format detection
+
+    Returns:
+        Parsed DataFrame or None if download/parse fails.
+    """
+    try:
+        # Use the direct download URL for Google Drive files
+        url = f"https://drive.google.com/uc?id={file_id}&export=download"
+        logger.info(f"Fetching Google Drive file: {file_id}")
+
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+
+        content = response.content
+        logger.info(f"Downloaded {len(content)} bytes from Google Drive")
+
+        # Detect file type
+        if (file_name and file_name.lower().endswith(".xlsx")) or (file_name and file_name.lower().endswith(".xls")):
+            df = pd.read_excel(io.BytesIO(content))
+        elif file_name and file_name.lower().endswith(".csv"):
+            df = pd.read_csv(io.BytesIO(content))
+        else:
+            # Try CSV first, then Excel
+            try:
+                df = pd.read_csv(io.BytesIO(content))
+            except Exception:
+                df = pd.read_excel(io.BytesIO(content))
+
+        logger.info(f"Successfully parsed {len(df)} rows from Google Drive file")
+        return df
+
+    except requests.RequestException as e:
+        logger.error(f"Failed to download file from Google Drive: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to parse Google Drive file: {e}")
+        return None
 
 
 def get_public_file_from_upload(file_name: str, content: bytes) -> pd.DataFrame | None:
