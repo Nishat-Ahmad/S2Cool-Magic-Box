@@ -23,6 +23,7 @@ import ModelComparisonChart from "./components/ModelComparisonChart";
 import FeatureImportanceChart from "./components/FeatureImportanceChart";
 import PipelineDetails from "./components/PipelineDetails";
 import GhiAnalysis from "./components/GhiAnalysis";
+import DriveDatasetInsights from "./components/DriveDatasetInsights";
 
 // --------------- helpers ---------------
 
@@ -241,6 +242,13 @@ export default function App() {
           ============================================================ */}
       {activeTab === "ghi" && (
         <GhiAnalysis city={city} date={date} />
+      )}
+
+      {/* ============================================================
+          TAB 3: Drive Dataset Insights
+          ============================================================ */}
+      {activeTab === "dataset" && (
+        <DriveDatasetInsights />
       )}
 
       {/* ============================================================

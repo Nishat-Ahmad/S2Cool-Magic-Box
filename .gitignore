@@ -74,3 +74,4 @@ magic/
 Static Model/Dataset
 Static Model/logs/
 !Static Model/scripts/
+push_to_hub.py

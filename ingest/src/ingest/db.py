@@ -14,6 +14,7 @@ from .api import SolarWeatherRecord
 
 logger = logging.getLogger(__name__)
 
+
 CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS solar_weather_data (
     id                          BIGSERIAL,

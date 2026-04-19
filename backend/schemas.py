@@ -252,3 +252,105 @@ class GhiAnalysisResponse(BaseModel):
     weekly_trend: list[GhiDailySummary]
     city_comparison: list[GhiCityProfile]
     seasonal: list[SeasonalCurve]
+
+
+# ---- Tab 5: Drive Dataset Insights ----
+
+
+class DriveDailyPoint(BaseModel):
+    """Daily aggregate point for Drive-ingested data."""
+
+    date_utc: date
+    avg_ghi: float | None = None
+    avg_temp: float | None = None
+
+
+class DriveCityMetric(BaseModel):
+    """City-level aggregate metric from Drive-ingested data."""
+
+    city: str
+    avg_ghi: float | None = None
+    avg_temp: float | None = None
+
+
+class DriveScatterPoint(BaseModel):
+    """One scatter point for GHI vs temperature."""
+
+    ghi: float
+    temp: float
+
+
+class DriveRecentPoint(BaseModel):
+    """Recent timestamp-level record for trend visualization."""
+
+    timestamp_utc: datetime
+    city: str
+    ghi: float | None = None
+    temp: float | None = None
+
+
+class DriveTimeSeriesPoint(BaseModel):
+    """One timestamp with all available metrics (comprehensive format)."""
+
+    timestamp_utc: datetime
+    city: str
+    power_avg_w: float | None = None
+    ghi_w_m2: float | None = None
+    dni_w_m2: float | None = None
+    dhi_w_m2: float | None = None
+    ambient_temp_c: float | None = None
+    relative_humidity_pct: float | None = None
+    wind_speed_m_s: float | None = None
+
+
+class DriveInsightsResponse(BaseModel):
+    """Chart-ready payload for the Drive dataset insights tab."""
+
+    source_file_name: str | None = None
+    last_ingested_at: datetime | None = None
+    total_points: int
+    daily: list[DriveDailyPoint]
+    by_city: list[DriveCityMetric]
+    scatter: list[DriveScatterPoint]
+    recent: list[DriveRecentPoint]
+
+
+class DriveFolderDataRequest(BaseModel):
+    """Request to fetch and parse data from a public file URL."""
+
+    file_url: str = Field(..., description="Public URL to CSV/XLSX file (Google Drive or any source)")
+
+
+class DriveFolderDataResponse(DriveInsightsResponse):
+    """Chart-ready payload from on-demand public file fetch."""
+
+    file_url: str | None = None
+    fetch_timestamp_utc: datetime | None = None
+    timeseries: list[DriveTimeSeriesPoint] | None = None
+
+
+class DriveFileItem(BaseModel):
+    """One file from a Google Drive folder listing."""
+
+    id: str
+    name: str
+    mimeType: str
+    size: int | None = None
+    modifiedTime: str | None = None
+
+
+class DriveFolderListResponse(BaseModel):
+    """Response containing list of files from a Google Drive folder."""
+
+    folder_id: str
+    total_files: int
+    files: list[DriveFileItem]
+
+
+class DriveFolderListRequest(BaseModel):
+    """Request to list files from a public Google Drive folder."""
+
+    folder_url: str = Field(
+        ...,
+        description="Public Google Drive folder URL (e.g., https://drive.google.com/drive/folders/{FOLDER_ID})",
+    )
